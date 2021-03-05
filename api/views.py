@@ -2,7 +2,7 @@ from django.shortcuts import get_object_or_404
 
 from rest_framework import generics, status
 from .models import Room
-from .serializers import RoomSerializer, CreateRoomSerializer
+from .serializers import RoomSerializer, CreateRoomSerializer, UpdateRoomSerializer
 from rest_framework.views import APIView
 from rest_framework.response import Response
 
@@ -84,3 +84,28 @@ class LeaveRoom(APIView):
             Room.objects.filter(host=self.request.session.session_key).delete()
 
         return Response({'Message': 'Success'})
+
+
+class UpdateRoom(APIView):
+    serializer_class = UpdateRoomSerializer
+
+    def patch(self, request, *args, **kwargs):
+        if not self.request.session.exists(self.request.session.session_key):
+            self.request.session.create()
+
+        serializer = self.serializer_class(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        guest_can_pause = serializer.data.get('guest_can_pause')
+        votes_to_skip = serializer.data.get('votes_to_skip')
+        code = serializer.data.get('code')
+        room = get_object_or_404(Room, code=code)
+        user_id = self.request.session.session_key
+
+        if room.host != user_id:
+            return Response({'Message': 'You are not the host of this room.'}, status=status.HTTP_403_FORBIDDEN)
+
+        room.guest_can_pause = guest_can_pause
+        room.votes_to_skip = votes_to_skip
+        room.save(update_fields=['guest_can_pause', 'votes_to_skip'])
+
+        return Response(RoomSerializer(room).data)
